@@ -1,8 +1,9 @@
 """
-Excel Insight Dashboard
-------------------------
+Ledger — Spreadsheet Dashboards
+--------------------------------
 Upload an Excel file and get an automatic, interactive dashboard with
 descriptive statistics, distributions, correlations, and filtering.
+No sidebar — everything lives in the main page.
 
 Run with:
     streamlit run app.py
@@ -12,7 +13,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 
 # -------------------------------------------------------------------
 # Page config & style
@@ -21,10 +21,10 @@ st.set_page_config(
     page_title="Ledger — Spreadsheet Dashboards",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-PRIMARY = "#2E7D5B"      # ledger green — accent, derived from spreadsheet grid lines, desaturated
+PRIMARY = "#2E7D5B"      # ledger green — accent, desaturated
 ACCENT = "#C97A2B"       # amber — secondary accent for charts
 INK = "#1B2430"          # near-black ink for headings/text
 PAPER = "#F7F5F0"        # warm paper background
@@ -32,13 +32,42 @@ LINE = "#D8D4C9"         # hairline grid color
 
 st.markdown(
     f"""
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      if (window.tailwind) {{
+        tailwind.config = {{
+          theme: {{
+            extend: {{
+              colors: {{
+                ink: '{INK}',
+                paper: '{PAPER}',
+                line: '{LINE}',
+                ledger: '{PRIMARY}',
+                amber: '{ACCENT}',
+              }},
+              fontFamily: {{
+                display: ['Space Grotesk', 'sans-serif'],
+                mono: ['JetBrains Mono', 'monospace'],
+              }},
+            }},
+          }},
+        }}
+      }}
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+        /* Hide the native Streamlit sidebar entirely */
+        section[data-testid="stSidebar"] {{ display: none !important; }}
+        button[data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
+        header[data-testid="stHeader"] {{ background: transparent; }}
 
         html, body, [class*="css"] {{
             font-family: 'Space Grotesk', -apple-system, sans-serif;
         }}
         .main {{ background-color: {PAPER}; }}
+        .block-container {{ padding-top: 1.6rem; max-width: 1180px; }}
+
         .stMetric {{
             background-color: white;
             border: 1px solid {LINE};
@@ -47,114 +76,12 @@ st.markdown(
             box-shadow: none;
         }}
         h1, h2, h3 {{ color: {INK}; font-family: 'Space Grotesk', sans-serif; font-weight: 600; }}
-        .block-container {{ padding-top: 2rem; }}
         div[data-testid="stMetricValue"] {{ color: {PRIMARY}; font-family: 'JetBrains Mono', monospace; }}
         code, .mono {{ font-family: 'JetBrains Mono', monospace; }}
 
-        /* ---------------- Landing page ---------------- */
-        .hero-wrap {{
-            border: 1px solid {LINE};
-            border-radius: 6px;
-            background: white;
-            padding: 0;
-            margin-bottom: 2rem;
-            overflow: hidden;
-        }}
-        .hero-top {{
-            display: flex;
-            border-bottom: 1px solid {LINE};
-        }}
-        .hero-eyebrow {{
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.72rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: {PRIMARY};
-            padding: 14px 28px 0 28px;
-        }}
-        .hero-headline {{
-            font-size: 2.6rem;
-            font-weight: 700;
-            line-height: 1.12;
-            color: {INK};
-            padding: 6px 28px 18px 28px;
-            margin: 0;
-            letter-spacing: -0.01em;
-        }}
-        .hero-headline span {{ color: {PRIMARY}; }}
-        .hero-sub {{
-            font-size: 1.05rem;
-            color: #5b5f66;
-            padding: 0 28px 24px 28px;
-            max-width: 640px;
-            line-height: 1.55;
-        }}
-        .ledger-demo {{
-            display: flex;
-            align-items: stretch;
-            border-top: 1px dashed {LINE};
-        }}
-        .ledger-grid {{
-            flex: 1.1;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.78rem;
-            padding: 18px 0 18px 28px;
-        }}
-        .ledger-row {{
-            display: grid;
-            grid-template-columns: 1.3fr 0.9fr 0.9fr;
-            border-bottom: 1px solid {LINE};
-        }}
-        .ledger-row.header {{
-            color: {INK};
-            font-weight: 600;
-            border-bottom: 1px solid {INK};
-        }}
-        .ledger-row div {{
-            padding: 7px 10px;
-            color: #444;
-            border-right: 1px solid {LINE};
-        }}
-        .ledger-row div:last-child {{ border-right: none; }}
-        .ledger-arrow {{
-            flex: 0.25;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: {LINE};
-            font-size: 1.6rem;
-        }}
-        .ledger-chart {{
-            flex: 0.9;
-            padding: 18px 28px 18px 0;
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            height: 100%;
-        }}
-        .bar {{
-            flex: 1;
-            background: {PRIMARY};
-            border-radius: 2px 2px 0 0;
-            opacity: 0.85;
-        }}
+        .bar {{ flex: 1; background: {PRIMARY}; border-radius: 2px 2px 0 0; opacity: 0.85; }}
         .bar:nth-child(2) {{ background: {ACCENT}; }}
         .bar:nth-child(4) {{ background: {ACCENT}; }}
-
-        /* Feature row, ledger-cell style not card-shadow style */
-        .feat-row {{ display: flex; gap: 0; border: 1px solid {LINE}; border-radius: 6px; overflow: hidden; margin-bottom: 1.6rem; }}
-        .feat-cell {{ flex: 1; padding: 20px 22px; border-right: 1px solid {LINE}; background: white; }}
-        .feat-cell:last-child {{ border-right: none; }}
-        .feat-num {{ font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: {PRIMARY}; letter-spacing: 0.06em; }}
-        .feat-title {{ font-weight: 600; color: {INK}; font-size: 1.0rem; margin: 6px 0 4px 0; }}
-        .feat-desc {{ font-size: 0.88rem; color: #6b6f76; line-height: 1.45; }}
-
-        .footnote {{ font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #9a978c; text-align: center; padding-top: 0.5rem; }}
-
-        @media (max-width: 900px) {{
-            .ledger-demo {{ flex-direction: column; }}
-            .hero-headline {{ font-size: 1.9rem; }}
-        }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -183,12 +110,10 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     for col in df.columns:
         if df[col].dtype == object:
-            # Try numeric conversion
             converted = pd.to_numeric(df[col], errors="coerce")
             if converted.notna().sum() >= 0.8 * df[col].notna().sum() and df[col].notna().sum() > 0:
                 df[col] = converted
                 continue
-            # Try date conversion
             try:
                 converted_dates = pd.to_datetime(df[col], errors="coerce")
                 if converted_dates.notna().sum() >= 0.8 * df[col].notna().sum() and df[col].notna().sum() > 0:
@@ -205,44 +130,74 @@ def get_column_types(df: pd.DataFrame):
         c for c in df.columns
         if c not in numeric_cols and c not in datetime_cols
     ]
-    # Treat low-cardinality numeric columns as potentially categorical too
     return numeric_cols, categorical_cols, datetime_cols
 
 
 # -------------------------------------------------------------------
-# Sidebar — upload & filters
+# Top bar (replaces sidebar branding)
 # -------------------------------------------------------------------
-st.sidebar.markdown(
-    "<div style='font-family:Space Grotesk,sans-serif;font-weight:700;font-size:1.3rem;color:#1B2430;'>📊 Ledger</div>",
+st.markdown(
+    """
+    <div class="flex items-baseline justify-between border-b border-line pb-3 mb-6">
+        <div class="font-display font-bold text-xl text-ink">📊 Ledger</div>
+        <div class="font-mono text-xs text-gray-400 uppercase tracking-wider">spreadsheet → insight, automatically</div>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
-st.sidebar.caption("Spreadsheet → insight, automatically.")
 
-uploaded_file = st.sidebar.file_uploader(
-    "Upload Excel file", type=["xlsx", "xls", "xlsm"]
+uploaded_file = st.file_uploader(
+    "Upload Excel file", type=["xlsx", "xls", "xlsm"], label_visibility="collapsed"
 )
 
+# -------------------------------------------------------------------
+# Homepage (no file uploaded yet)
+# -------------------------------------------------------------------
 if uploaded_file is None:
     st.markdown(
         f"""
-        <div class="hero-wrap">
-            <div class="hero-eyebrow">SPREADSHEET → INSIGHT, NO FORMULAS</div>
-            <div class="hero-headline">Your Excel file<br>has a dashboard <span>hiding inside it.</span></div>
-            <div class="hero-sub">
-                Upload a workbook and this app reads every column, figures out what's
+        <div class="border border-line rounded-lg bg-white overflow-hidden mb-8">
+            <div class="font-mono text-xs uppercase tracking-wider text-ledger pt-4 px-7">
+                spreadsheet → insight, no formulas
+            </div>
+            <div class="font-display font-bold text-ink leading-tight px-7 pt-1 pb-4 text-3xl md:text-[2.6rem] -tracking-tight">
+                Your Excel file<br>has a dashboard <span class="text-ledger">hiding inside it.</span>
+            </div>
+            <div class="text-gray-600 px-7 pb-6 max-w-xl text-base leading-relaxed">
+                Upload a workbook above and this app reads every column, figures out what's
                 numeric, what's a date, what's a category — then builds the charts,
                 stats, and filters for you. No pivot tables. No setup.
             </div>
-            <div class="ledger-demo">
-                <div class="ledger-grid">
-                    <div class="ledger-row header"><div>region</div><div>units</div><div>revenue</div></div>
-                    <div class="ledger-row"><div>north</div><div>184</div><div>9,210</div></div>
-                    <div class="ledger-row"><div>south</div><div>261</div><div>13,040</div></div>
-                    <div class="ledger-row"><div>east</div><div>97</div><div>4,870</div></div>
-                    <div class="ledger-row"><div>west</div><div>305</div><div>15,690</div></div>
+            <div class="flex flex-col md:flex-row items-stretch border-t border-dashed border-line">
+                <div class="flex-[1.1] font-mono text-xs px-0 pl-7 py-4">
+                    <div class="grid grid-cols-[1.3fr_0.9fr_0.9fr] border-b border-ink font-semibold text-ink">
+                        <div class="px-2.5 py-1.5 border-r border-line">region</div>
+                        <div class="px-2.5 py-1.5 border-r border-line">units</div>
+                        <div class="px-2.5 py-1.5">revenue</div>
+                    </div>
+                    <div class="grid grid-cols-[1.3fr_0.9fr_0.9fr] border-b border-line text-gray-700">
+                        <div class="px-2.5 py-1.5 border-r border-line">north</div>
+                        <div class="px-2.5 py-1.5 border-r border-line">184</div>
+                        <div class="px-2.5 py-1.5">9,210</div>
+                    </div>
+                    <div class="grid grid-cols-[1.3fr_0.9fr_0.9fr] border-b border-line text-gray-700">
+                        <div class="px-2.5 py-1.5 border-r border-line">south</div>
+                        <div class="px-2.5 py-1.5 border-r border-line">261</div>
+                        <div class="px-2.5 py-1.5">13,040</div>
+                    </div>
+                    <div class="grid grid-cols-[1.3fr_0.9fr_0.9fr] border-b border-line text-gray-700">
+                        <div class="px-2.5 py-1.5 border-r border-line">east</div>
+                        <div class="px-2.5 py-1.5 border-r border-line">97</div>
+                        <div class="px-2.5 py-1.5">4,870</div>
+                    </div>
+                    <div class="grid grid-cols-[1.3fr_0.9fr_0.9fr] border-b border-line text-gray-700">
+                        <div class="px-2.5 py-1.5 border-r border-line">west</div>
+                        <div class="px-2.5 py-1.5 border-r border-line">305</div>
+                        <div class="px-2.5 py-1.5">15,690</div>
+                    </div>
                 </div>
-                <div class="ledger-arrow">→</div>
-                <div class="ledger-chart">
+                <div class="flex items-center justify-center text-line text-2xl px-2 py-2 md:py-0">→</div>
+                <div class="flex-[0.9] flex items-end gap-2 px-7 py-4 h-28">
                     <div class="bar" style="height:46%"></div>
                     <div class="bar" style="height:65%"></div>
                     <div class="bar" style="height:24%"></div>
@@ -256,45 +211,34 @@ if uploaded_file is None:
 
     st.markdown(
         """
-        <div class="feat-row">
-            <div class="feat-cell">
-                <div class="feat-num">READS</div>
-                <div class="feat-title">Every sheet, as-is</div>
-                <div class="feat-desc">Multi-sheet workbooks, messy headers, mixed text and numbers — it cleans and types each column automatically.</div>
+        <div class="flex flex-col md:flex-row border border-line rounded-lg overflow-hidden mb-6">
+            <div class="flex-1 p-5 border-b md:border-b-0 md:border-r border-line bg-white">
+                <div class="font-mono text-xs text-ledger tracking-wider">READS</div>
+                <div class="font-semibold text-ink mt-1.5 mb-1">Every sheet, as-is</div>
+                <div class="text-sm text-gray-500 leading-relaxed">Multi-sheet workbooks, messy headers, mixed text and numbers — cleaned and typed automatically.</div>
             </div>
-            <div class="feat-cell">
-                <div class="feat-num">BUILDS</div>
-                <div class="feat-title">Stats and charts</div>
-                <div class="feat-desc">Descriptive statistics, distributions, correlations, and a full auto-generated chart grid, all in one pass.</div>
+            <div class="flex-1 p-5 border-b md:border-b-0 md:border-r border-line bg-white">
+                <div class="font-mono text-xs text-ledger tracking-wider">BUILDS</div>
+                <div class="font-semibold text-ink mt-1.5 mb-1">Stats and charts</div>
+                <div class="text-sm text-gray-500 leading-relaxed">Descriptive statistics, distributions, correlations, and a full auto-generated chart grid.</div>
             </div>
-            <div class="feat-cell">
-                <div class="feat-num">RESPONDS</div>
-                <div class="feat-title">To your filters, live</div>
-                <div class="feat-desc">Slice by category, numeric range, or date in the sidebar — every chart and stat updates together.</div>
+            <div class="flex-1 p-5 bg-white">
+                <div class="font-mono text-xs text-ledger tracking-wider">RESPONDS</div>
+                <div class="font-semibold text-ink mt-1.5 mb-1">To your filters, live</div>
+                <div class="text-sm text-gray-500 leading-relaxed">Slice by category, numeric range, or date — every chart and stat updates together.</div>
             </div>
+        </div>
+        <div class="font-mono text-xs text-gray-400 text-center pt-1 pb-2">
+            .xlsx · .xls · .xlsm — processed in your session, never stored
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    st.markdown("##### Start here")
-    st.caption("Drop a workbook in the sidebar uploader, or use the field below.")
-    uploaded_file_main = st.file_uploader(
-        "Upload Excel file", type=["xlsx", "xls", "xlsm"], key="main_uploader",
-        label_visibility="collapsed",
-    )
-    if uploaded_file_main is not None:
-        uploaded_file = uploaded_file_main
-
-    st.markdown(
-        '<div class="footnote">.xlsx · .xls · .xlsm — processed in your session, never stored</div>',
-        unsafe_allow_html=True,
-    )
-
-if uploaded_file is None:
     st.stop()
 
+# -------------------------------------------------------------------
 # Load workbook
+# -------------------------------------------------------------------
 try:
     sheets = load_excel(uploaded_file)
 except Exception as e:
@@ -302,10 +246,12 @@ except Exception as e:
     st.stop()
 
 sheet_names = list(sheets.keys())
+
 if len(sheet_names) > 1:
-    selected_sheet = st.sidebar.selectbox("Select sheet", sheet_names)
+    selected_sheet = st.selectbox("Sheet", sheet_names, label_visibility="collapsed")
 else:
     selected_sheet = sheet_names[0]
+    st.markdown(f"<div class='font-mono text-xs text-gray-400 pt-2'>sheet: {selected_sheet}</div>", unsafe_allow_html=True)
 
 raw_df = sheets[selected_sheet]
 df = clean_dataframe(raw_df.copy())
@@ -316,124 +262,63 @@ if df.empty:
 
 numeric_cols, categorical_cols, datetime_cols = get_column_types(df)
 
-# ---- Sidebar filters ----
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔍 Filters")
-
+# -------------------------------------------------------------------
+# Filters — in-page expander, no sidebar
+# -------------------------------------------------------------------
 filtered_df = df.copy()
 
-with st.sidebar.expander("Categorical filters", expanded=False):
-    for col in categorical_cols:
-        unique_vals = df[col].dropna().unique().tolist()
-        if 1 < len(unique_vals) <= 50:
-            selected_vals = st.multiselect(f"{col}", sorted(map(str, unique_vals)), default=[])
-            if selected_vals:
-                filtered_df = filtered_df[filtered_df[col].astype(str).isin(selected_vals)]
+with st.expander("🔍 Filters", expanded=False):
+    f1, f2, f3 = st.columns(3)
 
-with st.sidebar.expander("Numeric range filters", expanded=False):
-    for col in numeric_cols:
-        col_min = float(df[col].min())
-        col_max = float(df[col].max())
-        if col_min < col_max:
-            sel_range = st.slider(f"{col}", col_min, col_max, (col_min, col_max))
-            filtered_df = filtered_df[
-                (filtered_df[col] >= sel_range[0]) & (filtered_df[col] <= sel_range[1])
-            ]
+    with f1:
+        st.markdown("**Categorical**")
+        for col in categorical_cols:
+            unique_vals = df[col].dropna().unique().tolist()
+            if 1 < len(unique_vals) <= 50:
+                selected_vals = st.multiselect(f"{col}", sorted(map(str, unique_vals)), default=[], key=f"cat_{col}")
+                if selected_vals:
+                    filtered_df = filtered_df[filtered_df[col].astype(str).isin(selected_vals)]
 
-if datetime_cols:
-    with st.sidebar.expander("Date filters", expanded=False):
+    with f2:
+        st.markdown("**Numeric range**")
+        for col in numeric_cols:
+            col_min = float(df[col].min())
+            col_max = float(df[col].max())
+            if col_min < col_max:
+                sel_range = st.slider(f"{col}", col_min, col_max, (col_min, col_max), key=f"num_{col}")
+                filtered_df = filtered_df[
+                    (filtered_df[col] >= sel_range[0]) & (filtered_df[col] <= sel_range[1])
+                ]
+
+    with f3:
+        st.markdown("**Date range**")
         for col in datetime_cols:
             min_date = df[col].min()
             max_date = df[col].max()
             if pd.notna(min_date) and pd.notna(max_date) and min_date < max_date:
-                date_range = st.date_input(f"{col}", (min_date.date(), max_date.date()))
+                date_range = st.date_input(f"{col}", (min_date.date(), max_date.date()), key=f"date_{col}")
                 if isinstance(date_range, tuple) and len(date_range) == 2:
                     start, end = date_range
                     filtered_df = filtered_df[
                         (filtered_df[col] >= pd.Timestamp(start))
                         & (filtered_df[col] <= pd.Timestamp(end))
                     ]
+        if not datetime_cols:
+            st.caption("No date columns detected.")
 
-st.sidebar.markdown("---")
-st.sidebar.caption(f"Showing **{len(filtered_df):,}** of **{len(df):,}** rows")
+st.markdown(
+    f"<div class='font-mono text-xs text-gray-400 mb-2'>showing {len(filtered_df):,} of {len(df):,} rows</div>",
+    unsafe_allow_html=True,
+)
 
 # -------------------------------------------------------------------
-# Main layout
+# Main header
 # -------------------------------------------------------------------
-st.sidebar.markdown("---")
-full_dashboard_mode = st.sidebar.checkbox("🖥️ Full-screen landscape dashboard mode", value=False)
-
-st.title("📊 Excel Insight Dashboard")
-st.caption(f"Sheet: **{selected_sheet}** · {df.shape[0]:,} rows × {df.shape[1]} columns")
-
-if full_dashboard_mode:
-    st.info("Full dashboard mode — all charts below in one continuous landscape view. Untick the sidebar box to return to tabs.")
-
-    MAX_CHARTS_PER_TYPE = 8
-    CHART_HEIGHT = 340
-    charts = []
-
-    for col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
-        fig = px.histogram(filtered_df, x=col, nbins=30, color_discrete_sequence=[PRIMARY])
-        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
-        charts.append((f"Distribution — {col}", fig))
-
-    for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
-        n_unique = filtered_df[col].nunique()
-        if 1 < n_unique <= 100:
-            vc = filtered_df[col].astype(str).value_counts().reset_index().head(10)
-            vc.columns = [col, "Count"]
-            fig = px.bar(vc, x="Count", y=col, orientation="h", color="Count", color_continuous_scale="Viridis")
-            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10),
-                               yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
-            charts.append((f"Top categories — {col}", fig))
-
-    if datetime_cols and numeric_cols:
-        date_col = datetime_cols[0]
-        line_data = filtered_df.dropna(subset=[date_col]).sort_values(date_col)
-        for val_col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
-            fig = px.line(line_data, x=date_col, y=val_col, color_discrete_sequence=[ACCENT])
-            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
-            charts.append((f"{val_col} over time", fig))
-
-    if len(numeric_cols) >= 2:
-        corr = filtered_df[numeric_cols].corr()
-        fig = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu", zmin=-1, zmax=1, aspect="auto")
-        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
-        charts.append(("Correlation heatmap", fig))
-
-        corr_abs = filtered_df[numeric_cols].corr().abs()
-        pairs = corr_abs.where(~np.eye(len(corr_abs), dtype=bool)).stack().reset_index()
-        pairs.columns = ["var1", "var2", "abs_corr"]
-        pairs = pairs.drop_duplicates(subset="abs_corr").sort_values("abs_corr", ascending=False)
-        for _, row in pairs.head(4).iterrows():
-            fig = px.scatter(filtered_df, x=row["var1"], y=row["var2"], color_discrete_sequence=[PRIMARY], opacity=0.7)
-            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
-            charts.append((f"{row['var1']} vs {row['var2']}", fig))
-
-    for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
-        n_unique = filtered_df[col].nunique()
-        if 1 < n_unique <= 8:
-            vc = filtered_df[col].astype(str).value_counts().reset_index()
-            vc.columns = [col, "Count"]
-            fig = px.pie(vc, names=col, values="Count", color_discrete_sequence=COLOR_SEQ, hole=0.35)
-            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
-            charts.append((f"Share breakdown — {col}", fig))
-
-    if not charts:
-        st.info("No applicable charts could be generated for this dataset.")
-    else:
-        st.caption(f"{len(charts)} charts · 4 per row")
-        cols_per_row = 4
-        for i in range(0, len(charts), cols_per_row):
-            row_charts = charts[i:i + cols_per_row]
-            cols = st.columns(cols_per_row)
-            for col_widget, (title, fig) in zip(cols, row_charts):
-                with col_widget:
-                    st.markdown(f"**{title}**")
-                    st.plotly_chart(fig, use_container_width=True)
-
-    st.stop()
+st.markdown(
+    f"""<div class="font-display font-bold text-2xl text-ink mt-2 mb-0.5">📊 {selected_sheet}</div>
+    <div class="text-sm text-gray-500 mb-5">{df.shape[0]:,} rows × {df.shape[1]} columns</div>""",
+    unsafe_allow_html=True,
+)
 
 tab_overview, tab_stats, tab_dashboard, tab_visuals, tab_correlation, tab_data = st.tabs(
     ["🏠 Overview", "🧮 Descriptive Stats", "🖼️ Auto Dashboard", "📈 Visual Explorer", "🔗 Correlations", "🗂️ Raw Data"]
@@ -500,102 +385,78 @@ with tab_stats:
             fig.update_layout(yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- Auto Dashboard tab (all charts, one grid) ----------------
+# ---------------- Auto Dashboard tab (decongested grid) ----------------
 with tab_dashboard:
     st.markdown("#### Everything in one view")
-    st.caption(
-        "Every applicable chart for this dataset, generated automatically and laid out in a grid."
-    )
+    st.caption("Every applicable chart for this dataset, generated automatically. Two per row, with room to read each one.")
 
-    MAX_CHARTS_PER_TYPE = 8  # safety cap so huge datasets don't render hundreds of charts
-    CHART_HEIGHT = 320
+    MAX_CHARTS_PER_TYPE = 6
+    CHART_HEIGHT = 380
 
-    charts = []  # list of (title, plotly_fig)
+    charts = []
 
-    # 1. Histograms for numeric columns
     for col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
-        fig = px.histogram(
-            filtered_df, x=col, nbins=30,
-            color_discrete_sequence=[PRIMARY],
-        )
-        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+        fig = px.histogram(filtered_df, x=col, nbins=30, color_discrete_sequence=[PRIMARY])
+        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=40, b=30, l=40, r=20))
         charts.append((f"Distribution — {col}", fig))
 
-    # 2. Bar charts for categorical columns (top categories)
     for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
         n_unique = filtered_df[col].nunique()
         if 1 < n_unique <= 100:
             vc = filtered_df[col].astype(str).value_counts().reset_index().head(10)
             vc.columns = [col, "Count"]
-            fig = px.bar(
-                vc, x="Count", y=col, orientation="h",
-                color="Count", color_continuous_scale="Viridis",
-            )
+            fig = px.bar(vc, x="Count", y=col, orientation="h", color="Count", color_continuous_scale="Viridis")
             fig.update_layout(
-                height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10),
+                height=CHART_HEIGHT, margin=dict(t=40, b=30, l=40, r=20),
                 yaxis=dict(autorange="reversed"), coloraxis_showscale=False,
             )
             charts.append((f"Top categories — {col}", fig))
 
-    # 3. Time series line charts (date x numeric)
     if datetime_cols and numeric_cols:
         date_col = datetime_cols[0]
         line_data = filtered_df.dropna(subset=[date_col]).sort_values(date_col)
         for val_col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
             fig = px.line(line_data, x=date_col, y=val_col, color_discrete_sequence=[ACCENT])
-            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=40, b=30, l=40, r=20))
             charts.append((f"{val_col} over time", fig))
 
-    # 4. Correlation heatmap
     if len(numeric_cols) >= 2:
         corr = filtered_df[numeric_cols].corr()
-        fig = px.imshow(
-            corr, text_auto=".2f", color_continuous_scale="RdBu", zmin=-1, zmax=1,
-            aspect="auto",
-        )
-        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+        fig = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu", zmin=-1, zmax=1, aspect="auto")
+        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=40, b=30, l=40, r=20))
         charts.append(("Correlation heatmap", fig))
 
-    # 5. Top scatter plots — strongest correlated numeric pairs, capped
-    if len(numeric_cols) >= 2:
-        corr = filtered_df[numeric_cols].corr().abs()
-        pairs = (
-            corr.where(~np.eye(len(corr), dtype=bool))
-            .stack()
-            .reset_index()
-        )
+        corr_abs = filtered_df[numeric_cols].corr().abs()
+        pairs = corr_abs.where(~np.eye(len(corr_abs), dtype=bool)).stack().reset_index()
         pairs.columns = ["var1", "var2", "abs_corr"]
         pairs = pairs.drop_duplicates(subset="abs_corr").sort_values("abs_corr", ascending=False)
-        for _, row in pairs.head(4).iterrows():
-            fig = px.scatter(
-                filtered_df, x=row["var1"], y=row["var2"],
-                color_discrete_sequence=[PRIMARY], opacity=0.7,
-            )
-            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+        for _, row in pairs.head(3).iterrows():
+            fig = px.scatter(filtered_df, x=row["var1"], y=row["var2"], color_discrete_sequence=[PRIMARY], opacity=0.7)
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=40, b=30, l=40, r=20))
             charts.append((f"{row['var1']} vs {row['var2']}", fig))
 
-    # 6. Pie charts for low-cardinality categoricals
     for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
         n_unique = filtered_df[col].nunique()
         if 1 < n_unique <= 8:
             vc = filtered_df[col].astype(str).value_counts().reset_index()
             vc.columns = [col, "Count"]
             fig = px.pie(vc, names=col, values="Count", color_discrete_sequence=COLOR_SEQ, hole=0.35)
-            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=40, b=30, l=40, r=20))
             charts.append((f"Share breakdown — {col}", fig))
 
     if not charts:
         st.info("No applicable charts could be generated for this dataset.")
     else:
-        st.caption(f"{len(charts)} charts generated · scroll for more · use the sidebar filters to update them all at once")
-        cols_per_row = 3
+        st.caption(f"{len(charts)} charts generated · adjust filters above to update them all at once")
+        cols_per_row = 2
         for i in range(0, len(charts), cols_per_row):
             row_charts = charts[i:i + cols_per_row]
-            cols = st.columns(cols_per_row)
+            cols = st.columns(cols_per_row, gap="large")
             for col_widget, (title, fig) in zip(cols, row_charts):
                 with col_widget:
                     st.markdown(f"**{title}**")
                     st.plotly_chart(fig, use_container_width=True)
+            st.write("")  # vertical breathing room between rows
 
 # ---------------- Visual explorer tab ----------------
 with tab_visuals:
