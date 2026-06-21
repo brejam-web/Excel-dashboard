@@ -190,11 +190,83 @@ st.sidebar.caption(f"Showing **{len(filtered_df):,}** of **{len(df):,}** rows")
 # -------------------------------------------------------------------
 # Main layout
 # -------------------------------------------------------------------
+st.sidebar.markdown("---")
+full_dashboard_mode = st.sidebar.checkbox("🖥️ Full-screen landscape dashboard mode", value=False)
+
 st.title("📊 Excel Insight Dashboard")
 st.caption(f"Sheet: **{selected_sheet}** · {df.shape[0]:,} rows × {df.shape[1]} columns")
 
-tab_overview, tab_stats, tab_visuals, tab_correlation, tab_data = st.tabs(
-    ["🏠 Overview", "🧮 Descriptive Stats", "📈 Visual Explorer", "🔗 Correlations", "🗂️ Raw Data"]
+if full_dashboard_mode:
+    st.info("Full dashboard mode — all charts below in one continuous landscape view. Untick the sidebar box to return to tabs.")
+
+    MAX_CHARTS_PER_TYPE = 8
+    CHART_HEIGHT = 340
+    charts = []
+
+    for col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
+        fig = px.histogram(filtered_df, x=col, nbins=30, color_discrete_sequence=[PRIMARY])
+        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+        charts.append((f"Distribution — {col}", fig))
+
+    for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
+        n_unique = filtered_df[col].nunique()
+        if 1 < n_unique <= 100:
+            vc = filtered_df[col].astype(str).value_counts().reset_index().head(10)
+            vc.columns = [col, "Count"]
+            fig = px.bar(vc, x="Count", y=col, orientation="h", color="Count", color_continuous_scale="Viridis")
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10),
+                               yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+            charts.append((f"Top categories — {col}", fig))
+
+    if datetime_cols and numeric_cols:
+        date_col = datetime_cols[0]
+        line_data = filtered_df.dropna(subset=[date_col]).sort_values(date_col)
+        for val_col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
+            fig = px.line(line_data, x=date_col, y=val_col, color_discrete_sequence=[ACCENT])
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            charts.append((f"{val_col} over time", fig))
+
+    if len(numeric_cols) >= 2:
+        corr = filtered_df[numeric_cols].corr()
+        fig = px.imshow(corr, text_auto=".2f", color_continuous_scale="RdBu", zmin=-1, zmax=1, aspect="auto")
+        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+        charts.append(("Correlation heatmap", fig))
+
+        corr_abs = filtered_df[numeric_cols].corr().abs()
+        pairs = corr_abs.where(~np.eye(len(corr_abs), dtype=bool)).stack().reset_index()
+        pairs.columns = ["var1", "var2", "abs_corr"]
+        pairs = pairs.drop_duplicates(subset="abs_corr").sort_values("abs_corr", ascending=False)
+        for _, row in pairs.head(4).iterrows():
+            fig = px.scatter(filtered_df, x=row["var1"], y=row["var2"], color_discrete_sequence=[PRIMARY], opacity=0.7)
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            charts.append((f"{row['var1']} vs {row['var2']}", fig))
+
+    for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
+        n_unique = filtered_df[col].nunique()
+        if 1 < n_unique <= 8:
+            vc = filtered_df[col].astype(str).value_counts().reset_index()
+            vc.columns = [col, "Count"]
+            fig = px.pie(vc, names=col, values="Count", color_discrete_sequence=COLOR_SEQ, hole=0.35)
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            charts.append((f"Share breakdown — {col}", fig))
+
+    if not charts:
+        st.info("No applicable charts could be generated for this dataset.")
+    else:
+        st.caption(f"{len(charts)} charts · 4 per row")
+        cols_per_row = 4
+        for i in range(0, len(charts), cols_per_row):
+            row_charts = charts[i:i + cols_per_row]
+            cols = st.columns(cols_per_row)
+            for col_widget, (title, fig) in zip(cols, row_charts):
+                with col_widget:
+                    st.markdown(f"**{title}**")
+                    st.plotly_chart(fig, use_container_width=True)
+
+    st.stop()
+
+tab_overview, tab_stats, tab_dashboard, tab_visuals, tab_correlation, tab_data = st.tabs(
+    ["🏠 Overview", "🧮 Descriptive Stats", "🖼️ Auto Dashboard", "📈 Visual Explorer", "🔗 Correlations", "🗂️ Raw Data"]
 )
 
 # ---------------- Overview tab ----------------
@@ -257,6 +329,103 @@ with tab_stats:
             )
             fig.update_layout(yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- Auto Dashboard tab (all charts, one grid) ----------------
+with tab_dashboard:
+    st.markdown("#### Everything in one view")
+    st.caption(
+        "Every applicable chart for this dataset, generated automatically and laid out in a grid."
+    )
+
+    MAX_CHARTS_PER_TYPE = 8  # safety cap so huge datasets don't render hundreds of charts
+    CHART_HEIGHT = 320
+
+    charts = []  # list of (title, plotly_fig)
+
+    # 1. Histograms for numeric columns
+    for col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
+        fig = px.histogram(
+            filtered_df, x=col, nbins=30,
+            color_discrete_sequence=[PRIMARY],
+        )
+        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+        charts.append((f"Distribution — {col}", fig))
+
+    # 2. Bar charts for categorical columns (top categories)
+    for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
+        n_unique = filtered_df[col].nunique()
+        if 1 < n_unique <= 100:
+            vc = filtered_df[col].astype(str).value_counts().reset_index().head(10)
+            vc.columns = [col, "Count"]
+            fig = px.bar(
+                vc, x="Count", y=col, orientation="h",
+                color="Count", color_continuous_scale="Viridis",
+            )
+            fig.update_layout(
+                height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10),
+                yaxis=dict(autorange="reversed"), coloraxis_showscale=False,
+            )
+            charts.append((f"Top categories — {col}", fig))
+
+    # 3. Time series line charts (date x numeric)
+    if datetime_cols and numeric_cols:
+        date_col = datetime_cols[0]
+        line_data = filtered_df.dropna(subset=[date_col]).sort_values(date_col)
+        for val_col in numeric_cols[:MAX_CHARTS_PER_TYPE]:
+            fig = px.line(line_data, x=date_col, y=val_col, color_discrete_sequence=[ACCENT])
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            charts.append((f"{val_col} over time", fig))
+
+    # 4. Correlation heatmap
+    if len(numeric_cols) >= 2:
+        corr = filtered_df[numeric_cols].corr()
+        fig = px.imshow(
+            corr, text_auto=".2f", color_continuous_scale="RdBu", zmin=-1, zmax=1,
+            aspect="auto",
+        )
+        fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+        charts.append(("Correlation heatmap", fig))
+
+    # 5. Top scatter plots — strongest correlated numeric pairs, capped
+    if len(numeric_cols) >= 2:
+        corr = filtered_df[numeric_cols].corr().abs()
+        pairs = (
+            corr.where(~np.eye(len(corr), dtype=bool))
+            .stack()
+            .reset_index()
+        )
+        pairs.columns = ["var1", "var2", "abs_corr"]
+        pairs = pairs.drop_duplicates(subset="abs_corr").sort_values("abs_corr", ascending=False)
+        for _, row in pairs.head(4).iterrows():
+            fig = px.scatter(
+                filtered_df, x=row["var1"], y=row["var2"],
+                color_discrete_sequence=[PRIMARY], opacity=0.7,
+            )
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            charts.append((f"{row['var1']} vs {row['var2']}", fig))
+
+    # 6. Pie charts for low-cardinality categoricals
+    for col in categorical_cols[:MAX_CHARTS_PER_TYPE]:
+        n_unique = filtered_df[col].nunique()
+        if 1 < n_unique <= 8:
+            vc = filtered_df[col].astype(str).value_counts().reset_index()
+            vc.columns = [col, "Count"]
+            fig = px.pie(vc, names=col, values="Count", color_discrete_sequence=COLOR_SEQ, hole=0.35)
+            fig.update_layout(height=CHART_HEIGHT, margin=dict(t=30, b=10, l=10, r=10))
+            charts.append((f"Share breakdown — {col}", fig))
+
+    if not charts:
+        st.info("No applicable charts could be generated for this dataset.")
+    else:
+        st.caption(f"{len(charts)} charts generated · scroll for more · use the sidebar filters to update them all at once")
+        cols_per_row = 3
+        for i in range(0, len(charts), cols_per_row):
+            row_charts = charts[i:i + cols_per_row]
+            cols = st.columns(cols_per_row)
+            for col_widget, (title, fig) in zip(cols, row_charts):
+                with col_widget:
+                    st.markdown(f"**{title}**")
+                    st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- Visual explorer tab ----------------
 with tab_visuals:
