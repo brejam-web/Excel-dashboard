@@ -18,29 +18,143 @@ import plotly.graph_objects as go
 # Page config & style
 # -------------------------------------------------------------------
 st.set_page_config(
-    page_title="Excel Insight Dashboard",
+    page_title="Ledger — Spreadsheet Dashboards",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-PRIMARY = "#6C63FF"
-ACCENT = "#00C2A8"
+PRIMARY = "#2E7D5B"      # ledger green — accent, derived from spreadsheet grid lines, desaturated
+ACCENT = "#C97A2B"       # amber — secondary accent for charts
+INK = "#1B2430"          # near-black ink for headings/text
+PAPER = "#F7F5F0"        # warm paper background
+LINE = "#D8D4C9"         # hairline grid color
 
 st.markdown(
     f"""
     <style>
-        .main {{ background-color: #fafafa; }}
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+        html, body, [class*="css"] {{
+            font-family: 'Space Grotesk', -apple-system, sans-serif;
+        }}
+        .main {{ background-color: {PAPER}; }}
         .stMetric {{
             background-color: white;
-            border: 1px solid #eee;
-            border-radius: 12px;
+            border: 1px solid {LINE};
+            border-radius: 4px;
             padding: 10px 15px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            box-shadow: none;
         }}
-        h1, h2, h3 {{ color: #2b2b3b; }}
+        h1, h2, h3 {{ color: {INK}; font-family: 'Space Grotesk', sans-serif; font-weight: 600; }}
         .block-container {{ padding-top: 2rem; }}
-        div[data-testid="stMetricValue"] {{ color: {PRIMARY}; }}
+        div[data-testid="stMetricValue"] {{ color: {PRIMARY}; font-family: 'JetBrains Mono', monospace; }}
+        code, .mono {{ font-family: 'JetBrains Mono', monospace; }}
+
+        /* ---------------- Landing page ---------------- */
+        .hero-wrap {{
+            border: 1px solid {LINE};
+            border-radius: 6px;
+            background: white;
+            padding: 0;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }}
+        .hero-top {{
+            display: flex;
+            border-bottom: 1px solid {LINE};
+        }}
+        .hero-eyebrow {{
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: {PRIMARY};
+            padding: 14px 28px 0 28px;
+        }}
+        .hero-headline {{
+            font-size: 2.6rem;
+            font-weight: 700;
+            line-height: 1.12;
+            color: {INK};
+            padding: 6px 28px 18px 28px;
+            margin: 0;
+            letter-spacing: -0.01em;
+        }}
+        .hero-headline span {{ color: {PRIMARY}; }}
+        .hero-sub {{
+            font-size: 1.05rem;
+            color: #5b5f66;
+            padding: 0 28px 24px 28px;
+            max-width: 640px;
+            line-height: 1.55;
+        }}
+        .ledger-demo {{
+            display: flex;
+            align-items: stretch;
+            border-top: 1px dashed {LINE};
+        }}
+        .ledger-grid {{
+            flex: 1.1;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            padding: 18px 0 18px 28px;
+        }}
+        .ledger-row {{
+            display: grid;
+            grid-template-columns: 1.3fr 0.9fr 0.9fr;
+            border-bottom: 1px solid {LINE};
+        }}
+        .ledger-row.header {{
+            color: {INK};
+            font-weight: 600;
+            border-bottom: 1px solid {INK};
+        }}
+        .ledger-row div {{
+            padding: 7px 10px;
+            color: #444;
+            border-right: 1px solid {LINE};
+        }}
+        .ledger-row div:last-child {{ border-right: none; }}
+        .ledger-arrow {{
+            flex: 0.25;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: {LINE};
+            font-size: 1.6rem;
+        }}
+        .ledger-chart {{
+            flex: 0.9;
+            padding: 18px 28px 18px 0;
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            height: 100%;
+        }}
+        .bar {{
+            flex: 1;
+            background: {PRIMARY};
+            border-radius: 2px 2px 0 0;
+            opacity: 0.85;
+        }}
+        .bar:nth-child(2) {{ background: {ACCENT}; }}
+        .bar:nth-child(4) {{ background: {ACCENT}; }}
+
+        /* Feature row, ledger-cell style not card-shadow style */
+        .feat-row {{ display: flex; gap: 0; border: 1px solid {LINE}; border-radius: 6px; overflow: hidden; margin-bottom: 1.6rem; }}
+        .feat-cell {{ flex: 1; padding: 20px 22px; border-right: 1px solid {LINE}; background: white; }}
+        .feat-cell:last-child {{ border-right: none; }}
+        .feat-num {{ font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: {PRIMARY}; letter-spacing: 0.06em; }}
+        .feat-title {{ font-weight: 600; color: {INK}; font-size: 1.0rem; margin: 6px 0 4px 0; }}
+        .feat-desc {{ font-size: 0.88rem; color: #6b6f76; line-height: 1.45; }}
+
+        .footnote {{ font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #9a978c; text-align: center; padding-top: 0.5rem; }}
+
+        @media (max-width: 900px) {{
+            .ledger-demo {{ flex-direction: column; }}
+            .hero-headline {{ font-size: 1.9rem; }}
+        }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -98,30 +212,86 @@ def get_column_types(df: pd.DataFrame):
 # -------------------------------------------------------------------
 # Sidebar — upload & filters
 # -------------------------------------------------------------------
-st.sidebar.title("📊 Excel Insight Dashboard")
-st.sidebar.write("Upload a spreadsheet to get started.")
+st.sidebar.markdown(
+    "<div style='font-family:Space Grotesk,sans-serif;font-weight:700;font-size:1.3rem;color:#1B2430;'>📊 Ledger</div>",
+    unsafe_allow_html=True,
+)
+st.sidebar.caption("Spreadsheet → insight, automatically.")
 
 uploaded_file = st.sidebar.file_uploader(
     "Upload Excel file", type=["xlsx", "xls", "xlsm"]
 )
 
 if uploaded_file is None:
-    st.title("📊 Excel Insight Dashboard")
+    st.markdown(
+        f"""
+        <div class="hero-wrap">
+            <div class="hero-eyebrow">SPREADSHEET → INSIGHT, NO FORMULAS</div>
+            <div class="hero-headline">Your Excel file<br>has a dashboard <span>hiding inside it.</span></div>
+            <div class="hero-sub">
+                Upload a workbook and this app reads every column, figures out what's
+                numeric, what's a date, what's a category — then builds the charts,
+                stats, and filters for you. No pivot tables. No setup.
+            </div>
+            <div class="ledger-demo">
+                <div class="ledger-grid">
+                    <div class="ledger-row header"><div>region</div><div>units</div><div>revenue</div></div>
+                    <div class="ledger-row"><div>north</div><div>184</div><div>9,210</div></div>
+                    <div class="ledger-row"><div>south</div><div>261</div><div>13,040</div></div>
+                    <div class="ledger-row"><div>east</div><div>97</div><div>4,870</div></div>
+                    <div class="ledger-row"><div>west</div><div>305</div><div>15,690</div></div>
+                </div>
+                <div class="ledger-arrow">→</div>
+                <div class="ledger-chart">
+                    <div class="bar" style="height:46%"></div>
+                    <div class="bar" style="height:65%"></div>
+                    <div class="bar" style="height:24%"></div>
+                    <div class="bar" style="height:78%"></div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown(
         """
-        Welcome! This app turns any Excel file into an interactive,
-        visual dashboard — automatically.
-
-        **What it does:**
-        - 📥 Reads every sheet in your workbook
-        - 🧹 Auto-detects numeric, date, and categorical columns
-        - 📈 Builds summary statistics, distributions, and correlations
-        - 🔍 Lets you filter and explore the data interactively
-
-        👈 Upload an `.xlsx` file using the sidebar to begin.
-        """
+        <div class="feat-row">
+            <div class="feat-cell">
+                <div class="feat-num">READS</div>
+                <div class="feat-title">Every sheet, as-is</div>
+                <div class="feat-desc">Multi-sheet workbooks, messy headers, mixed text and numbers — it cleans and types each column automatically.</div>
+            </div>
+            <div class="feat-cell">
+                <div class="feat-num">BUILDS</div>
+                <div class="feat-title">Stats and charts</div>
+                <div class="feat-desc">Descriptive statistics, distributions, correlations, and a full auto-generated chart grid, all in one pass.</div>
+            </div>
+            <div class="feat-cell">
+                <div class="feat-num">RESPONDS</div>
+                <div class="feat-title">To your filters, live</div>
+                <div class="feat-desc">Slice by category, numeric range, or date in the sidebar — every chart and stat updates together.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    st.info("No file uploaded yet. Try one of your own spreadsheets, or any export from Excel/Google Sheets.")
+
+    st.markdown("##### Start here")
+    st.caption("Drop a workbook in the sidebar uploader, or use the field below.")
+    uploaded_file_main = st.file_uploader(
+        "Upload Excel file", type=["xlsx", "xls", "xlsm"], key="main_uploader",
+        label_visibility="collapsed",
+    )
+    if uploaded_file_main is not None:
+        uploaded_file = uploaded_file_main
+
+    st.markdown(
+        '<div class="footnote">.xlsx · .xls · .xlsm — processed in your session, never stored</div>',
+        unsafe_allow_html=True,
+    )
+
+if uploaded_file is None:
     st.stop()
 
 # Load workbook
